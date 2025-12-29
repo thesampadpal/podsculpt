@@ -1,65 +1,120 @@
-import Image from "next/image";
+'use client'
+import { useState } from 'react'
+import Image from 'next/image'
 
 export default function Home() {
+  const [rssUrl, setRssUrl] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    
+    try {
+      // Step 1: Save submission
+      const submitResponse = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rssUrl })
+      })
+      
+      const submitData = await submitResponse.json()
+      
+      if (!submitResponse.ok) {
+        alert(`Error: ${submitData.error}`)
+        setLoading(false)
+        return
+      }
+      
+      console.log('Submission saved:', submitData.submissionId)
+      
+      // Step 2: Process the RSS feed
+      const processResponse = await fetch('/api/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId: submitData.submissionId })
+      })
+      
+      const processData = await processResponse.json()
+      
+      if (processResponse.ok) {
+        alert(`Success! Found episode: ${processData.episode.title}`)
+        console.log('Episode info:', processData.episode)
+      } else {
+        alert(`Processing error: ${processData.error}`)
+      }
+      
+    } catch (error) {
+      console.error('Error:', error)
+      alert('Something went wrong. Check console.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen flex items-center justify-center px-4" 
+         style={{ background: 'linear-gradient(135deg, #1a1612 0%, #2a241f 25%, #3d3428 50%, #2a241f 75%, #1a1612 100%)' }}>
+      
+      <div className="bg-[#2a241f]/95 backdrop-blur-sm p-10 rounded-3xl shadow-2xl max-w-2xl w-full border border-[#AD6E30]/30">
+        
+        {/* Logo */}
+        <div className="flex justify-center mb-8">
+          <Image 
+            src="/PodSculpt.svg" 
+            alt="PodSculpt" 
+            width={200} 
+            height={200}
+            className="drop-shadow-2xl"
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        
+        {/* Headline */}
+        <h1 className="text-5xl font-bold text-center mb-4 text-[#F5E6D3]">
+          Turn Your Podcast Into<br/>
+          <span className="bg-gradient-to-r from-[#AD6E30] via-[#C97D3A] to-[#AE9865] bg-clip-text text-transparent">
+            Viral Clips
+          </span>
+        </h1>
+        
+        {/* Subheadline */}
+        <p className="text-[#D4C4B0] text-center mb-8 text-lg">
+          Get timestamped show notes + 3 ready-to-share video clips<br/>
+          from any podcast RSS feed
+        </p>
+        
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="url"
+            value={rssUrl}
+            onChange={(e) => setRssUrl(e.target.value)}
+            placeholder="Paste your podcast RSS feed URL"
+            className="w-full px-6 py-4 bg-[#1a1612]/60 border-2 border-[#AD6E30]/40 rounded-2xl 
+                     focus:ring-4 focus:ring-[#AD6E30]/20 focus:border-[#C97D3A] 
+                     focus:outline-none transition-all text-[#F5E6D3] placeholder-[#AE9865]/60 text-lg"
+            required
+          />
+          
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-4 rounded-2xl font-bold text-lg text-white
+                     bg-gradient-to-r from-[#AD6E30] via-[#C97D3A] to-[#D4A574]
+                     hover:from-[#B8773A] hover:via-[#D48A4A] hover:to-[#E4B584]
+                     disabled:from-gray-600 disabled:via-gray-600 disabled:to-gray-600
+                     transform hover:scale-[1.02] active:scale-[0.98]
+                     transition-all shadow-lg hover:shadow-[#AD6E30]/50"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            {loading ? 'Processing...' : '✨ Get My Clips'}
+          </button>
+        </form>
+        
+        {/* Footer */}
+        <p className="text-sm text-[#AE9865]/80 text-center mt-6">
+          Built by <a href="https://twitter.com/sampad_ai" className="text-[#C97D3A] hover:text-[#D4A574] hover:underline transition-colors">@sampad_ai</a>
+        </p>
+      </div>
     </div>
-  );
+  )
 }
