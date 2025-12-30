@@ -1,8 +1,10 @@
 'use client'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 
 export default function Home() {
+  const router = useRouter()
   const [rssUrl, setRssUrl] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -17,6 +19,15 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rssUrl })
       })
+      
+      // Check if response is actually JSON
+      const contentType = submitResponse.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Response is not JSON:', await submitResponse.text())
+        alert('Server error - check console')
+        setLoading(false)
+        return
+      }
       
       const submitData = await submitResponse.json()
       
@@ -35,11 +46,19 @@ export default function Home() {
         body: JSON.stringify({ submissionId: submitData.submissionId })
       })
       
+      const processContentType = processResponse.headers.get('content-type')
+      if (!processContentType || !processContentType.includes('application/json')) {
+        console.error('Process response is not JSON:', await processResponse.text())
+        alert('Processing error - check console')
+        setLoading(false)
+        return
+      }
+      
       const processData = await processResponse.json()
       
       if (processResponse.ok) {
-        alert(`Success! Found episode: ${processData.episode.title}`)
-        console.log('Episode info:', processData.episode)
+        // Redirect to results page
+        router.push(`/results/${submitData.submissionId}`)
       } else {
         alert(`Processing error: ${processData.error}`)
       }
