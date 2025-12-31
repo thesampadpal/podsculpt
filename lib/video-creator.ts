@@ -17,40 +17,52 @@ export async function createClipVideo(
   return new Promise((resolve, reject) => {
     try {
       const duration = clip.end_time - clip.start_time
+      const bgPath = path.join(process.cwd(), 'public', 'bg.png')
       
-      console.log(`Creating clip: ${clip.title}`)
-      console.log(`Duration: ${duration}s (${clip.start_time}s - ${clip.end_time}s)`)
+      if (!fs.existsSync(bgPath)) {
+        reject(new Error('bg.png not found'))
+        return
+      }
       
-      // Create audio clip with proper options
+      console.log(`Creating video: ${clip.title}`)
+      
+      // Escape single quotes in title
+      const safeTitle = clip.title.replace(/'/g, '')
+      
       ffmpeg()
+        .input(bgPath)
+        .inputOptions(['-loop 1'])
         .input(audioFilePath)
         .inputOptions([`-ss ${clip.start_time}`])
         .outputOptions([
           `-t ${duration}`,
-          '-acodec copy'  // Copy audio codec instead of re-encoding
+          '-c:v libx264',
+          '-c:a aac',
+          '-shortest',
+          '-pix_fmt yuv420p',
+          '-vf',
+          `drawtext=text='${safeTitle}':fontsize=60:fontcolor=white:x=(w-text_w)/2:y=100:box=1:boxcolor=black@0.7:boxborderw=20,drawtext=text='PodSculpt.com':fontsize=30:fontcolor=white:x=(w-text_w)/2:y=h-100`
         ])
-        .output(outputPath.replace('.mp4', '.mp3'))
-        .on('start', (commandLine) => {
-          console.log('FFmpeg command:', commandLine)
+        .output(outputPath)
+        .on('start', (cmd) => {
+          console.log('FFmpeg:', cmd)
         })
         .on('progress', (progress) => {
           if (progress.percent) {
-            console.log(`Processing: ${Math.round(progress.percent)}% done`)
+            console.log(`${Math.round(progress.percent)}%`)
           }
         })
         .on('end', () => {
-          console.log(`Audio clip created!`)
+          console.log('✅ Video created')
           resolve(true)
         })
-        .on('error', (err, stdout, stderr) => {
-          console.error('FFmpeg error:', err.message)
-          console.error('FFmpeg stderr:', stderr)
+        .on('error', (err) => {
+          console.error('Error:', err.message)
           reject(err)
         })
         .run()
         
     } catch (error) {
-      console.error('Video creation error:', error)
       reject(error)
     }
   })
@@ -62,32 +74,22 @@ export async function createAllClips(
   submissionId: string
 ): Promise<string[]> {
   const outputPaths: string[] = []
-  
-  // Create outputs directory if it doesn't exist
   const outputDir = path.join(process.cwd(), 'temp', 'clips')
+  
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true })
   }
   
-  // Verify input file exists
-  if (!fs.existsSync(audioFilePath)) {
-    console.error('Audio file not found:', audioFilePath)
-    return []
-  }
-  
-  console.log('Input file size:', fs.statSync(audioFilePath).size, 'bytes')
-  
-  // Create each clip
   for (let i = 0; i < clips.length; i++) {
     const clip = clips[i]
-    const outputPath = path.join(outputDir, `${submissionId}_clip_${i + 1}.mp3`)
+    const outputPath = path.join(outputDir, `${submissionId}_clip_${i + 1}.mp4`)
     
     try {
       await createClipVideo(audioFilePath, clip, outputPath)
       outputPaths.push(outputPath)
-      console.log(`✅ Clip ${i + 1} created successfully`)
+      console.log(`✅ ${i + 1}/${clips.length}`)
     } catch (error) {
-      console.error(`❌ Failed to create clip ${i + 1}:`, error)
+      console.error(`❌ Clip ${i + 1} failed`)
     }
   }
   

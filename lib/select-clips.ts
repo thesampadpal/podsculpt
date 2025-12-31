@@ -64,8 +64,14 @@ Estimate timestamps based on natural conversation pacing (150-180 words per minu
       return null
     }
     
+    // Clean the response - remove markdown code blocks
+    const cleanedResponse = response
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .trim()
+    
     // Parse JSON response
-    const parsed = JSON.parse(response)
+    const parsed = JSON.parse(cleanedResponse)
     console.log('Clips selected:', parsed.clips.length)
     
     return parsed.clips || null

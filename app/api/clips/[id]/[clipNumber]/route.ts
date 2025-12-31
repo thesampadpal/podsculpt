@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: { id: string; clipNumber: string } }
 ) {
   try {
-    const { id, clipNumber } = params
+    const { id, clipNumber } = await params
     
     // Get submission to find clip path
     const { data: submission } = await supabase
