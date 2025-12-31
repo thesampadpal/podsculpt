@@ -1,70 +1,36 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
-import fs from 'fs'
-import path from 'path'
+import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseClient } from '@/lib/supabase';
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string; clipNumber: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; clipNumber: string }> }
 ) {
   try {
-    const { id, clipNumber } = await params
+    // Await the params
+    const { id, clipNumber } = await params;
     
-    // Get submission to find clip path
-    const { data: submission } = await supabase
-      .from('submissions')
-      .select(`clip_${clipNumber}_url`)
-      .eq('id', id)
-      .single()
-    
-    if (!submission) {
-      return NextResponse.json(
-        { error: 'Submission not found' },
-        { status: 404 }
-      )
-    }
-    
-    const clipUrl = submission[`clip_${clipNumber}_url` as keyof typeof submission] as string | null
-    
-    if (!clipUrl) {
+    const supabase = getSupabaseClient();
+
+    // Get the clip video URL from storage
+    const { data, error } = await supabase
+      .storage
+      .from('clips')
+      .createSignedUrl(`${id}/clip_${clipNumber}.mp4`, 3600);
+
+    if (error || !data) {
       return NextResponse.json(
         { error: 'Clip not found' },
         { status: 404 }
-      )
+      );
     }
-    
-    // Check if file exists
-    if (!fs.existsSync(clipUrl)) {
-      return NextResponse.json(
-        { error: 'Clip file not found' },
-        { status: 404 }
-      )
-    }
-    
-    // Read and serve the file
-    const fileBuffer = fs.readFileSync(clipUrl)
-    const ext = path.extname(clipUrl).toLowerCase()
-    
-    // Determine content type
-    const contentType = ext === '.mp4' 
-      ? 'video/mp4' 
-      : ext === '.mp3' 
-      ? 'audio/mpeg' 
-      : 'application/octet-stream'
-    
-    return new NextResponse(fileBuffer, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Length': fileBuffer.length.toString(),
-      },
-    })
-    
+
+    return NextResponse.json({ url: data.signedUrl });
   } catch (error) {
-    console.error('Error serving clip:', error)
+    console.error('Error fetching clip:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to fetch clip' },
       { status: 500 }
-    )
+    );
   }
 }
 
