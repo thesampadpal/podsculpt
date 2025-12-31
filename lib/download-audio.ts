@@ -5,8 +5,8 @@ import http from 'http'
 
 export async function downloadAudio(audioUrl: string, submissionId: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    // Create temp directory if it doesn't exist
-    const tempDir = path.join(process.cwd(), 'temp')
+    // Use /tmp for serverless environments (Vercel)
+    const tempDir = '/tmp'
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true })
     }

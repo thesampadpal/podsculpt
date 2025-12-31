@@ -125,7 +125,8 @@ export async function createAllClips(
   words?: any[]
 ): Promise<string[]> {
   const outputPaths: string[] = []
-  const outputDir = path.join(process.cwd(), 'temp', 'clips')
+  // Use /tmp for serverless environments (Vercel)
+  const outputDir = '/tmp/clips'
   
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true })
