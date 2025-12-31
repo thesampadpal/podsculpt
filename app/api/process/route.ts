@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       )
     }
     
-    // Save episode info to database
+    // Save episode info
     await supabase
       .from('submissions')
       .update({
@@ -62,27 +62,21 @@ export async function POST(request: Request) {
     // Download the audio file
     const audioFilePath = await downloadAudio(episode.audioUrl, submissionId)
     
-    // Update status to downloaded
     await supabase
       .from('submissions')
-      .update({
-        status: 'downloaded'
-      })
+      .update({ status: 'downloaded' })
       .eq('id', submissionId)
     
-    // Update status to transcribing
+    // Transcribe with word timestamps
     await supabase
       .from('submissions')
-      .update({
-        status: 'transcribing'
-      })
+      .update({ status: 'transcribing' })
       .eq('id', submissionId)
     
-    // Transcribe the audio
     console.log('Starting transcription for:', audioFilePath)
-    const transcript = await transcribeAudio(audioFilePath)
+    const transcriptData = await transcribeAudio(audioFilePath)
     
-    if (!transcript) {
+    if (!transcriptData) {
       await supabase
         .from('submissions')
         .update({
@@ -97,7 +91,10 @@ export async function POST(request: Request) {
       )
     }
     
-    // Save transcript to database
+    const transcript = transcriptData.text
+    const words = transcriptData.words
+    
+    // Save transcript
     await supabase
       .from('submissions')
       .update({
@@ -109,9 +106,7 @@ export async function POST(request: Request) {
     // Generate show notes
     await supabase
       .from('submissions')
-      .update({
-        status: 'generating_notes'
-      })
+      .update({ status: 'generating_notes' })
       .eq('id', submissionId)
     
     console.log('Generating show notes...')
@@ -121,7 +116,6 @@ export async function POST(request: Request) {
       console.error('Failed to generate show notes')
     }
     
-    // Save show notes to database
     await supabase
       .from('submissions')
       .update({
@@ -130,12 +124,10 @@ export async function POST(request: Request) {
       })
       .eq('id', submissionId)
     
-    // Select viral clips
+    // Select clips
     await supabase
       .from('submissions')
-      .update({
-        status: 'selecting_clips'
-      })
+      .update({ status: 'selecting_clips' })
       .eq('id', submissionId)
     
     console.log('Selecting clips...')
@@ -143,10 +135,8 @@ export async function POST(request: Request) {
     
     if (!clips || clips.length === 0) {
       console.error('Failed to select clips')
-      // Continue anyway, we'll handle this later
     }
     
-    // Save clips to database
     await supabase
       .from('submissions')
       .update({
@@ -155,25 +145,20 @@ export async function POST(request: Request) {
       })
       .eq('id', submissionId)
     
-    // Create video clips
-    let videoPaths: string[] = []
+    // Create video clips with captions
+    await supabase
+      .from('submissions')
+      .update({ status: 'creating_videos' })
+      .eq('id', submissionId)
+    
+    console.log('Creating video clips...')
+    
     if (clips && clips.length > 0) {
-      await supabase
-        .from('submissions')
-        .update({
-          status: 'creating_videos'
-        })
-        .eq('id', submissionId)
-      
-      console.log('Creating video clips...')
-      
       try {
-        videoPaths = await createAllClips(audioFilePath, clips, submissionId)
+        const videoPaths = await createAllClips(audioFilePath, clips, submissionId, words)
         
         console.log(`Created ${videoPaths.length} video clips`)
         
-        // For now, just save the local paths
-        // Later we'll upload to Supabase Storage
         await supabase
           .from('submissions')
           .update({
@@ -200,11 +185,7 @@ export async function POST(request: Request) {
       success: true,
       episode: {
         title: episode.title,
-        audioUrl: episode.audioUrl,
-        transcriptLength: transcript.length,
-        showNotes: showNotes,
-        clipsSelected: clips?.length || 0,
-        clipsCreated: videoPaths.length
+        clipsCreated: clips?.length || 0
       }
     })
     
@@ -215,4 +196,4 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
-} 
+}

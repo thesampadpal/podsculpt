@@ -12,7 +12,8 @@ interface Clip {
 export async function createClipVideo(
   audioFilePath: string,
   clip: Clip,
-  outputPath: string
+  outputPath: string,
+  words?: any[]
 ): Promise<boolean> {
   return new Promise((resolve, reject) => {
     try {
@@ -26,26 +27,61 @@ export async function createClipVideo(
       
       console.log(`Creating video: ${clip.title}`)
       
-      // Escape single quotes in title
-      const safeTitle = clip.title.replace(/'/g, '')
+      const safeTitle = clip.title.replace(/'/g, '').replace(/:/g, '')
       
-      ffmpeg()
+      // WITHOUT captions first - to test
+      const videoFilter = `drawtext=text='${safeTitle}':fontsize=60:fontcolor=white:x=(w-text_w)/2:y=100:box=1:boxcolor=black@0.7:boxborderw=20,drawtext=text='PodSculpt.com':fontsize=30:fontcolor=white:x=(w-text_w)/2:y=h-100`
+      
+      // Generate and add SRT captions
+      let srtPath = ''
+      if (words && words.length > 0) {
+        const { generateSRT } = require('./generate-captions')
+        srtPath = path.join(path.dirname(outputPath), `temp_${Date.now()}.srt`)
+        
+        try {
+          generateSRT(words, clip.start_time, clip.end_time, srtPath)
+          console.log('✅ SRT file created:', srtPath)
+        } catch (err) {
+          console.error('SRT generation failed:', err)
+          srtPath = '' // Continue without captions
+        }
+      }
+      
+      const command = ffmpeg()
         .input(bgPath)
         .inputOptions(['-loop 1'])
         .input(audioFilePath)
         .inputOptions([`-ss ${clip.start_time}`])
-        .outputOptions([
+      
+      // Add subtitles as separate filter if SRT exists
+      if (srtPath && fs.existsSync(srtPath)) {
+        const srtPathEscaped = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:')
+        
+        command.outputOptions([
           `-t ${duration}`,
           '-c:v libx264',
           '-c:a aac',
           '-shortest',
           '-pix_fmt yuv420p',
           '-vf',
-          `drawtext=text='${safeTitle}':fontsize=60:fontcolor=white:x=(w-text_w)/2:y=100:box=1:boxcolor=black@0.7:boxborderw=20,drawtext=text='PodSculpt.com':fontsize=30:fontcolor=white:x=(w-text_w)/2:y=h-100`
+          `${videoFilter},subtitles='${srtPathEscaped}':force_style='FontName=Arial,FontSize=48,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,BorderStyle=3,Outline=3,Shadow=0,Alignment=2,MarginV=150'`
         ])
+      } else {
+        command.outputOptions([
+          `-t ${duration}`,
+          '-c:v libx264',
+          '-c:a aac',
+          '-shortest',
+          '-pix_fmt yuv420p',
+          '-vf',
+          videoFilter
+        ])
+      }
+      
+      command
         .output(outputPath)
         .on('start', (cmd) => {
-          console.log('FFmpeg:', cmd)
+          console.log('FFmpeg command:', cmd)
         })
         .on('progress', (progress) => {
           if (progress.percent) {
@@ -53,11 +89,25 @@ export async function createClipVideo(
           }
         })
         .on('end', () => {
-          console.log('✅ Video created')
+          // Clean up SRT
+          if (srtPath && fs.existsSync(srtPath)) {
+            try {
+              fs.unlinkSync(srtPath)
+            } catch (e) {
+              console.log('Could not delete SRT file')
+            }
+          }
+          console.log('✅ Video created with captions')
           resolve(true)
         })
         .on('error', (err) => {
-          console.error('Error:', err.message)
+          console.error('FFmpeg error:', err.message)
+          // Clean up SRT on error too
+          if (srtPath && fs.existsSync(srtPath)) {
+            try {
+              fs.unlinkSync(srtPath)
+            } catch (e) {}
+          }
           reject(err)
         })
         .run()
@@ -71,7 +121,8 @@ export async function createClipVideo(
 export async function createAllClips(
   audioFilePath: string,
   clips: Clip[],
-  submissionId: string
+  submissionId: string,
+  words?: any[]
 ): Promise<string[]> {
   const outputPaths: string[] = []
   const outputDir = path.join(process.cwd(), 'temp', 'clips')
@@ -85,7 +136,7 @@ export async function createAllClips(
     const outputPath = path.join(outputDir, `${submissionId}_clip_${i + 1}.mp4`)
     
     try {
-      await createClipVideo(audioFilePath, clip, outputPath)
+      await createClipVideo(audioFilePath, clip, outputPath, words)
       outputPaths.push(outputPath)
       console.log(`✅ ${i + 1}/${clips.length}`)
     } catch (error) {
