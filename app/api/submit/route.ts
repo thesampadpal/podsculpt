@@ -1,55 +1,60 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseClient } from '@/lib/supabase';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { rssUrl } = await request.json()
-    
-    // Validate URL
-    if (!rssUrl || typeof rssUrl !== 'string' || !rssUrl.startsWith('http')) {
+    const { rssUrl } = await request.json();
+
+    if (!rssUrl) {
       return NextResponse.json(
-        { error: 'Invalid RSS URL. Please provide a valid URL starting with http:// or https://' },
+        { error: 'RSS URL is required' },
         { status: 400 }
-      )
+      );
     }
-    
-    // Save to database
-    const { data, error } = await supabase
+
+    const supabase = getSupabaseClient();
+
+    // Create submission record
+    const { data: submission, error } = await supabase
       .from('submissions')
-      .insert([
-        { 
-          rss_url: rssUrl,
-          status: 'pending'
-        }
-      ])
+      .insert({
+        rss_url: rssUrl,
+        status: 'processing',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
       .select()
-      .single()
-    
+      .single();
+
     if (error) {
-      console.error('Database error:', error)
-      // Provide more specific error messages
-      if (error.code === 'PGRST116' || error.message.includes('relation') || error.message.includes('does not exist')) {
-        return NextResponse.json(
-          { error: 'Database table not found. Please create the "submissions" table in Supabase.' },
-          { status: 500 }
-        )
-      }
+      console.error('Database error:', error);
       return NextResponse.json(
-        { error: `Database error: ${error.message}` },
+        { error: 'Failed to create submission' },
         { status: 500 }
-      )
+      );
     }
-    
-    return NextResponse.json({ 
-      success: true,
-      submissionId: data.id 
-    })
-    
-  } catch (error: any) {
-    console.error('Error:', error)
+
+    // Trigger background processing (fire and forget)
+    // We don't await this - it runs in the background
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://podsculpt.com'}/api/process`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submissionId: submission.id })
+    }).catch(error => {
+      console.error('Failed to trigger processing:', error);
+    });
+
+    // Return immediately with submission ID
+    return NextResponse.json({
+      submissionId: submission.id,
+      status: 'processing'
+    });
+
+  } catch (error) {
+    console.error('Submit error:', error);
     return NextResponse.json(
-      { error: error.message || 'Something went wrong' },
+      { error: 'Failed to process request' },
       { status: 500 }
-    )
+    );
   }
 }
